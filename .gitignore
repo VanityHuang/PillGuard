@@ -1,0 +1,35 @@
+# Gradle files
+.gradle/
+build/
+
+# Android Studio files
+.idea/workspace.xml
+.idea/libraries/
+.idea/caches/
+.idea/modules.xml
+.idea/deploymentTargetSelector.xml
+.idea/assetWizardSettings.xml
+*.iml
+.idea/modules/
+.idea/navEditor.xml
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Log files
+*.log
+
+# Keystore files
+# pillguard-release.jks
+# Note: In a real project, you might want to ignore the JKS, but here it might be part of the project delivery.
+# However, for security, it's better to keep it out of public repos.
+# But the user might want it there for this specific task. I'll leave it out of ignore for now unless it's sensitive.
+# Actually, the user has signingConfigs in build.gradle pointing to it.
+
+# Server related
+server/__pycache__/
+server/*.pyc
+server/*.db
+server/uploads/
+server/venv/
+server/logs/
