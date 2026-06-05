@@ -20,10 +20,15 @@ android {
 
     signingConfigs {
         release {
-            storeFile file('../pillguard-release.jks')
-            storePassword 'pillguard123'
-            keyAlias 'pillguard'
-            keyPassword 'pillguard123'
+            def props = new Properties()
+            def propFile = file('../local.properties')
+            if (propFile.exists()) {
+                props.load(new FileInputStream(propFile))
+                storeFile file('../pillguard-release.jks')
+                storePassword props['RELEASE_STORE_PASSWORD']
+                keyAlias props['RELEASE_KEY_ALIAS']
+                keyPassword props['RELEASE_KEY_PASSWORD']
+            }
         }
     }
 
