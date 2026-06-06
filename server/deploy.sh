@@ -81,8 +81,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable pillguard
 sudo systemctl restart pillguard
 
-# 配置每日邮件cron
-(crontab -l 2>/dev/null | grep -v daily_email; echo "0 22 * * * /var/pillguard/venv/bin/python3 /opt/pillguard/server/daily_email.py >> /var/pillguard/logs/daily_email.log 2>&1") | crontab -
+# 配置每日邮件cron（使用 root crontab，因为 daily_email.py 需要通过 systemctl 读取环境变量）
+sudo crontab -l 2>/dev/null | grep -v daily_email | sudo crontab -
+(sudo crontab -l 2>/dev/null; echo "0 22 * * * /var/pillguard/venv/bin/python3 /opt/pillguard/server/daily_email.py >> /var/pillguard/logs/daily_email.log 2>&1") | sudo crontab -
 
 # 配置Nginx
 sudo tee /etc/nginx/sites-available/pillguard > /dev/null << EOF
@@ -116,6 +117,8 @@ echo "============================================"
 echo ""
 echo "服务地址: http://${SERVER_IP}"
 echo "API健康检查: http://${SERVER_IP}/api/health"
+echo ""
+echo "邮件测试: sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py"
 echo ""
 echo "接下来请执行："
 echo "  python3 /opt/pillguard/server/create_user.py"

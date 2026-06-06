@@ -87,10 +87,14 @@ python3 /opt/pillguard/server/create_user.py
 #### 5. 验证
 
 ```bash
+# 检查 API 健康状态
 curl http://你的服务器IP/api/health
+
+# 测试邮件发送
+sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py
 ```
 
-返回 `{"status":"ok",...}` 即部署成功。
+返回 `{"status":"ok",...}` 即 API 部署成功；收到测试邮件即邮件配置正确。
 
 ## 使用教程
 
@@ -149,7 +153,25 @@ sudo systemctl restart pillguard
 sudo journalctl -u pillguard -f
 
 # 查看每日邮件日志
-cat /var/pillguard/logs/daily_email.log
+sudo tail -30 /var/pillguard/logs/daily_email.log
+
+# 测试邮件发送（验证SMTP配置是否正常）
+sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py
+
+# 手动运行一次每日邮件（不含 cron 环境限制）
+sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/daily_email.py
+```
+
+### 域名与 SSL
+
+服务器支持通过域名 `yellowduck.top`（Let's Encrypt 证书）和 IP `47.106.163.25` 访问：
+
+- **Android App**：使用 `http://47.106.163.25`（HTTP 直连，不经过 SSL）
+- **浏览器 / API 调用**：推荐 `https://yellowduck.top`
+
+Nginx 配置位于 `/etc/nginx/sites-available/yellowduck`，修改后需执行：
+```bash
+sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ## 项目结构
@@ -190,6 +212,7 @@ PillGuard/
 └── server/
     ├── app.py                                 # Flask API服务
     ├── daily_email.py                         # 每日邮件脚本
+    ├── test_email.py                          # SMTP邮件测试脚本
     ├── create_user.py                         # 创建用户脚本
     ├── manage_user.py                         # 用户管理脚本
     ├── deploy.sh                              # 一键部署脚本
@@ -200,7 +223,14 @@ PillGuard/
 
 | 触发条件 | 邮件内容 |
 |----------|----------|
-| 每日22:00 | 当日服药情况汇总 + 所有打卡照片 |
-| 在线重复打卡 | 即时告警 + 重复打卡照片 |
+| 每日22:00（root cron 定时任务） | 当日服药情况汇总 + 所有打卡照片 |
+| 在线重复打卡（Flask 后台线程） | 即时告警 + 重复打卡照片 |
+
+**工作原理**：SMTP 配置（QQ邮箱等）存储在 systemd 环境变量中，不在 cron 环境变量中。`daily_email.py` 和 `test_email.py` 通过 `get_service_env()` 函数自动从 systemd 服务读取配置，确保 cron 定时任务能正常发送邮件。
 
 邮件发送后服务器自动删除已发送的照片文件。
+
+**测试邮件**：
+```bash
+sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py
+```

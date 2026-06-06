@@ -11,6 +11,7 @@ build/
 .idea/assetWizardSettings.xml
 *.iml
 .idea/modules/
+.idea/markdown.xml
 .idea/navEditor.xml
 
 # Local configuration file (sdk path, etc)
@@ -25,6 +26,9 @@ local.properties
 # However, for security, it's better to keep it out of public repos.
 # But the user might want it there for this specific task. I'll leave it out of ignore for now unless it's sensitive.
 # Actually, the user has signingConfigs in build.gradle pointing to it.
+
+# Server info (contains credentials)
+serverinfo.txt
 
 # Server related
 server/__pycache__/

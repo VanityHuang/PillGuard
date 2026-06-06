@@ -8,11 +8,34 @@ import os
 import sys
 import smtplib
 import sqlite3
+import subprocess
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from datetime import datetime, timedelta
 from pathlib import Path
+
+
+def get_service_env():
+    """从 systemd 服务中读取环境变量（用于 cron 环境下运行时兜底）"""
+    try:
+        result = subprocess.run(
+            ['systemctl', 'show', 'pillguard', '--property=Environment'],
+            capture_output=True, text=True
+        )
+        env_line = result.stdout.strip()
+        if env_line.startswith('Environment='):
+            env_str = env_line[len('Environment='):]
+            for item in env_str.split():
+                if '=' in item:
+                    key, value = item.split('=', 1)
+                    os.environ.setdefault(key, value)
+    except Exception:
+        pass
+
+
+# 优先使用当前环境变量，cron 环境下自动从 systemd 服务兜底
+get_service_env()
 
 # 配置
 SMTP_HOST = os.environ.get('SMTP_HOST', 'smtp.example.com')
