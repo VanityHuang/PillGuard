@@ -80,7 +80,7 @@ class ReminderService : Service() {
             stopSelf()
         }
 
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     private fun playReminder(timeSlot: String, retryCount: Int, enableVibrate: Boolean, enableSound: Boolean, enablePopup: Boolean) {

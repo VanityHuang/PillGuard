@@ -1,7 +1,11 @@
 package com.pillguard.app.ui
 
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -13,6 +17,7 @@ import com.pillguard.app.receiver.ReminderReceiver
 import com.pillguard.app.security.SecurityManager
 import com.pillguard.app.service.ReminderService
 import com.pillguard.app.util.AuthManager
+import com.pillguard.app.util.ReminderScheduler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -55,7 +60,6 @@ class SettingsActivity : AppCompatActivity() {
         binding.switchSound.isChecked = prefs.getBoolean(KEY_REMINDER_SOUND, true)
         binding.switchPopup.isChecked = prefs.getBoolean(KEY_REMINDER_POPUP, true)
 
-        // 保存提醒方式设置
         binding.switchVibrate.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(KEY_REMINDER_VIBRATE, isChecked).apply()
         }
@@ -64,6 +68,19 @@ class SettingsActivity : AppCompatActivity() {
         }
         binding.switchPopup.setOnCheckedChangeListener { _, isChecked ->
             prefs.edit().putBoolean(KEY_REMINDER_POPUP, isChecked).apply()
+        }
+
+        // 系统权限状态
+        updatePermissionStatus()
+
+        // 电池优化
+        binding.btnBatteryOpt.setOnClickListener {
+            openBatteryOptimizationSettings()
+        }
+
+        // 精准闹钟权限（API 31+）
+        binding.btnAlarmPermission.setOnClickListener {
+            openAlarmPermissionSettings()
         }
 
         // 测试提醒
@@ -85,6 +102,85 @@ class SettingsActivity : AppCompatActivity() {
                 }
                 .setNegativeButton("取消", null)
                 .show()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 从系统设置返回后刷新权限状态
+        updatePermissionStatus()
+    }
+
+    private fun updatePermissionStatus() {
+        // 电池优化状态
+        val batteryDisabled = ReminderScheduler.isBatteryOptimizationDisabled(this)
+        if (batteryDisabled) {
+            binding.tvBatteryStatus.text = "✓ 已关闭（推荐）"
+            binding.tvBatteryStatus.setTextColor(getColor(android.R.color.holo_green_dark))
+            binding.btnBatteryOpt.isEnabled = false
+        } else {
+            binding.tvBatteryStatus.text = "⚠ 未关闭 — 可能影响提醒准时性"
+            binding.tvBatteryStatus.setTextColor(getColor(android.R.color.holo_orange_dark))
+            binding.btnBatteryOpt.isEnabled = true
+        }
+
+        // 精准闹钟权限（仅 API 31+）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val exactAlarmOk = ReminderScheduler.canScheduleExactAlarms(this)
+            if (exactAlarmOk) {
+                binding.tvAlarmStatus.text = "✓ 已授权（推荐）"
+                binding.tvAlarmStatus.setTextColor(getColor(android.R.color.holo_green_dark))
+                binding.btnAlarmPermission.isEnabled = false
+            } else {
+                binding.tvAlarmStatus.text = "⚠ 未授权 — 可能延迟提醒"
+                binding.tvAlarmStatus.setTextColor(getColor(android.R.color.holo_orange_dark))
+                binding.btnAlarmPermission.isEnabled = true
+            }
+        } else {
+            binding.tvAlarmStatus.text = "✓ 系统版本无需此权限"
+            binding.tvAlarmStatus.setTextColor(getColor(android.R.color.darker_gray))
+            binding.btnAlarmPermission.isEnabled = false
+        }
+    }
+
+    private fun openBatteryOptimizationSettings() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            }
+        } catch (e: Exception) {
+            // 部分设备不支持直接跳转，打开应用详情页
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e2: Exception) {
+                Toast.makeText(this, "无法打开系统设置，请手动设置", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun openAlarmPermissionSettings() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            }
+        } catch (e: Exception) {
+            try {
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                }
+                startActivity(intent)
+            } catch (e2: Exception) {
+                Toast.makeText(this, "请手动在系统设置中授权闹钟权限", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
@@ -111,7 +207,6 @@ class SettingsActivity : AppCompatActivity() {
             Toast.makeText(this@SettingsActivity, "打卡记录已清除", Toast.LENGTH_SHORT).show()
 
             if (isOnline) {
-                // 在线模式：清除后退出登录，但保留登录信息以便自动填入
                 SecurityManager.clearCredentials(this@SettingsActivity)
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit().clear().apply()
                 startActivity(Intent(this@SettingsActivity, LoginActivity::class.java).apply {

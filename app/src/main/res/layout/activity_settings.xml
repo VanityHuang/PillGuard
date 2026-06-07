@@ -244,6 +244,112 @@
 
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- 系统权限 -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="2dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="系统权限（确保准时提醒）"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:textColor="@color/text_primary"
+                        android:layout_marginBottom="12dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="电池优化"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:id="@+id/tvBatteryStatus"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="未关闭"
+                                android:textSize="12sp"
+                                android:textColor="@color/orange" />
+
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnBatteryOpt"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="去设置"
+                            app:cornerRadius="8dp"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:textColor="@color/primary" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="精准闹钟"
+                                android:textSize="14sp" />
+
+                            <TextView
+                                android:id="@+id/tvAlarmStatus"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="未授权"
+                                android:textSize="12sp"
+                                android:textColor="@color/orange" />
+
+                        </LinearLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnAlarmPermission"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="去设置"
+                            app:cornerRadius="8dp"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:textColor="@color/primary" />
+
+                    </LinearLayout>
+
+                </LinearLayout>
+
+            </com.google.android.material.card.MaterialCardView>
+
             <!-- 账户 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"

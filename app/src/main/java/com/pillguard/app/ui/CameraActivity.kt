@@ -19,6 +19,7 @@ import com.pillguard.app.util.AuthManager
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.ExecutorService
@@ -29,6 +30,7 @@ class CameraActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "CameraActivity"
         private const val REQUEST_CODE_PERMISSIONS = 10
+        const val PHOTOS_DIR = "pillsguard_photos"
         private val REQUIRED_PERMISSIONS = mutableListOf(Manifest.permission.CAMERA).apply {
             if (android.os.Build.VERSION.SDK_INT <= android.os.Build.VERSION_CODES.P) {
                 add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -89,39 +91,33 @@ class CameraActivity : AppCompatActivity() {
         val imageCapture = imageCapture ?: return
 
         if (isOffline) {
-            // 离线模式：不保存照片，直接记录打卡
-            saveCheckInRecord(null)
+            // 离线模式：仍保存照片到内部存储（上线后上传）
+            captureToInternalStorage(imageCapture)
             return
         }
 
-        // 在线模式：保存照片并上传
+        // 在线模式：保存照片到内部存储并排队上传
+        captureToInternalStorage(imageCapture)
+    }
+
+    private fun captureToInternalStorage(imageCapture: ImageCapture) {
+        val photosDir = File(filesDir, PHOTOS_DIR)
+        if (!photosDir.exists()) photosDir.mkdirs()
+
         val dateFormat = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault())
         val fileName = "PillGuard_${dateFormat.format(System.currentTimeMillis())}.jpg"
+        val photoFile = File(photosDir, fileName)
 
-        val contentValues = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            if (android.os.Build.VERSION.SDK_INT > android.os.Build.VERSION_CODES.P) {
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Pictures/PillGuard")
-            }
-        }
-
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(
-            contentResolver,
-            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            contentValues
-        ).build()
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(photoFile).build()
 
         imageCapture.takePicture(
             outputOptions,
             ContextCompat.getMainExecutor(this),
             object : ImageCapture.OnImageSavedCallback {
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val savedUri = output.savedUri
-                    Log.d(TAG, "照片已保存: $savedUri")
-
-                    // 保存打卡记录（上传在saveCheckInRecord中根据是否重复统一调度）
-                    saveCheckInRecord(savedUri?.toString())
+                    Log.d(TAG, "照片已保存: ${photoFile.absolutePath}")
+                    // 传递绝对路径，不再使用 content:// URI
+                    saveCheckInRecord(photoFile.absolutePath)
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -162,14 +158,14 @@ class CameraActivity : AppCompatActivity() {
                                         timeSlot = timeSlot,
                                         completed = true,
                                         photoPath = photoPath,
-                                        uploaded = isOffline || photoPath == null,
+                                        uploaded = photoPath == null,
                                         takenAt = now,
                                         isDuplicate = true
                                     )
                                 )
 
-                                // 在线模式：上传重复打卡照片到服务器
-                                if (!isOffline && photoPath != null) {
+                                // 有照片则排队上传（WorkManager 会等到网络可用）
+                                if (photoPath != null) {
                                     UploadWorker.scheduleUpload(
                                         this@CameraActivity,
                                         photoPath,
@@ -198,11 +194,11 @@ class CameraActivity : AppCompatActivity() {
                         completed = true,
                         photoPath = photoPath,
                         takenAt = now,
-                        uploaded = isOffline || photoPath == null
+                        uploaded = photoPath == null
                     )
                 )
-                // 在线模式：上传照片
-                if (!isOffline && photoPath != null) {
+                // 有照片则排队上传（WorkManager 会等到网络可用）
+                if (photoPath != null) {
                     UploadWorker.scheduleUpload(this@CameraActivity, photoPath, timeSlot)
                 }
                 runOnUiThread {
@@ -220,12 +216,12 @@ class CameraActivity : AppCompatActivity() {
                         timeSlot = timeSlot,
                         completed = true,
                         photoPath = photoPath,
-                        uploaded = isOffline || photoPath == null,
+                        uploaded = photoPath == null,
                         takenAt = now
                     )
                 )
-                // 在线模式：上传照片
-                if (!isOffline && photoPath != null) {
+                // 有照片则排队上传（WorkManager 会等到网络可用）
+                if (photoPath != null) {
                     UploadWorker.scheduleUpload(this@CameraActivity, photoPath, timeSlot)
                 }
                 runOnUiThread {

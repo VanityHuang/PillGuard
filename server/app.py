@@ -155,6 +155,16 @@ def send_duplicate_alert_email(username, date, time_slot, photo_path, taken_at):
         server.sendmail(SMTP_USER, ADMIN_EMAIL, msg.as_string())
         server.quit()
         print(f"[{datetime.now()}] 重复打卡邮件发送成功: {username} {date} {slot_label}")
+
+        # 邮件发送成功后立即删除照片（避免在服务器上累积）
+        if photo_path:
+            full_path = os.path.join(app.config['UPLOAD_FOLDER'], photo_path)
+            if os.path.exists(full_path):
+                try:
+                    os.remove(full_path)
+                    print(f"[{datetime.now()}] 重复打卡照片已删除: {photo_path}")
+                except OSError as e:
+                    print(f"[{datetime.now()}] 删除重复打卡照片失败: {photo_path}, {e}")
     except Exception as e:
         print(f"[{datetime.now()}] 重复打卡邮件发送失败: {e}")
 

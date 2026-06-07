@@ -5,14 +5,14 @@
 ## 主要功能
 
 - **定时提醒**：每日8:00和20:00自动提醒服药，支持震动、响铃和弹窗通知（可自由组合）
-- **智能提醒**：已打卡则自动跳过提醒；未打卡则每5分钟重复提醒，最多6次
-- **拍照打卡**：一键调用摄像头拍照，打卡时间自动判定早/晚时段
+- **智能提醒**：已打卡则自动跳过提醒；未打卡则每5分钟重复提醒，最多6次；使用系统闹钟接口（AlarmClock），厂商ROM兼容性更优
+- **拍照打卡**：一键调用摄像头拍照，照片保存在内部私有存储（**不在系统相册中显示**），打卡时间自动判定早/晚时段
 - **重复打卡检测**：重复打卡时弹窗警告，紫色标识，在线模式即时邮件通知
 - **服药历史**：主页7天周历 + 30天历史列表，直观展示打卡状态
-- **离线模式**：无服务器也可使用全部本地功能
-- **数据同步**：在线登录后自动同步服务器记录，照片后台自动上传
-- **每日邮件**：服务器22:00自动发送当日服药汇总邮件（含照片附件）
-- **提醒设置**：可自由开关震动/响铃/弹窗，支持测试提醒
+- **离线模式**：无服务器也可使用全部本地功能，照片排队等待上线后自动上传
+- **数据同步**：在线登录后自动同步服务器记录，照片通过WorkManager后台上传，成功后自动删除本地副本
+- **每日邮件**：服务器22:00自动发送当日服药汇总邮件（含照片附件）；重复打卡立即发送即时告警
+- **提醒设置**：可自由开关震动/响铃/弹窗，支持测试提醒；**电池优化**和**精准闹钟权限**状态一目了然，一键跳转系统设置
 
 ## 技术栈
 
@@ -26,7 +26,8 @@
 
 ### 客户端
 
-- Android Studio (Flamingo 或更新版本)
+- **推荐**：Android Studio (Flamingo 或更新版本)
+- **或**：VS Code + Android SDK 命令行（需设置 `ANDROID_HOME` 环境变量）
 - JDK 17
 - Android SDK 34
 - 最低运行设备：Android 8.0 (API 26)
@@ -110,11 +111,12 @@ sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py
 ### 打卡
 
 1. 在主页点击**拍照打卡**按钮
-2. 系统调用摄像头，拍照后自动保存
+2. 系统调用摄像头，拍照后自动保存（**保存在APP内部私有目录，不会出现在系统相册**）
 3. 打卡时间自动判定时段：
    - 2:00 ~ 14:00 → 早上打卡
    - 14:00 ~ 次日2:00 → 晚上打卡
 4. 如果该时段已有打卡记录，会弹出重复打卡警告
+5. 在线模式下照片自动排队上传，上传成功后自动删除本地副本；离线照片保留最多 24 小时后自动清理
 
 ### 查看历史
 
@@ -123,10 +125,12 @@ sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py
 
 ### 设置
 
-- 提醒方式：可自由开关震动、响铃、弹窗通知
-- 测试提醒：点击后立即触发一次提醒，方便验证提醒效果
-- 清除打卡记录：离线模式直接清除，在线模式清除后需重新登录（自动填入上次登录信息）
-- 退出登录：主页右上角菜单 → 退出登录
+- **提醒方式**：可自由开关震动、响铃、弹窗通知
+- **系统权限**：电池优化状态 + 精准闹钟权限检查，未开启可一键跳转系统设置开启（**确保提醒准时触发的关键**）
+- **测试提醒**：点击后立即触发一次提醒，方便验证提醒效果
+- **服务器地址**：支持修改 API 服务器地址
+- **清除打卡记录**：离线模式直接清除，在线模式清除后需重新登录（自动填入上次登录信息）
+- **退出登录**：主页右上角菜单 → 退出登录
 
 ## 服务器管理
 
@@ -146,20 +150,26 @@ python3 /opt/pillguard/server/manage_user.py delete 用户名
 # 查看服务状态
 sudo systemctl status pillguard
 
-# 重启服务
+# 重启服务（修改 app.py 后需要）
 sudo systemctl restart pillguard
 
 # 查看服务日志
-sudo journalctl -u pillguard -f
+sudo journalctl -u pillguard --no-pager -n 30
 
 # 查看每日邮件日志
 sudo tail -30 /var/pillguard/logs/daily_email.log
 
-# 测试邮件发送（验证SMTP配置是否正常）
+# 测试邮件发送
 sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py
 
-# 手动运行一次每日邮件（不含 cron 环境限制）
+# 手动运行一次每日邮件
 sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/daily_email.py
+
+# 查看服务器照片目录
+ls -lh /var/pillguard/uploads/
+
+# 查看数据库记录
+sqlite3 /var/pillguard/pillguard.db "SELECT mr.date, mr.time_slot, mr.is_duplicate, u.username FROM medication_records mr JOIN users u ON mr.user_id=u.id ORDER BY mr.date DESC LIMIT 10;"
 ```
 
 ### 域名与 SSL
@@ -189,7 +199,8 @@ PillGuard/
 │   │   ├── network/
 │   │   │   ├── ApiClient.kt                   # Retrofit客户端
 │   │   │   ├── ApiService.kt                  # API接口定义
-│   │   │   └── UploadWorker.kt                # 后台上传服务
+│   │   │   ├── UploadWorker.kt                # 后台上传服务
+│   │   │   └── PhotoCleanupWorker.kt          # 超时照片清理
 │   │   ├── receiver/
 │   │   │   ├── BootReceiver.kt                # 开机重设提醒
 │   │   │   └── ReminderReceiver.kt            # 提醒触发器
@@ -221,14 +232,14 @@ PillGuard/
 
 ## 邮件通知机制
 
-| 触发条件 | 邮件内容 |
-|----------|----------|
-| 每日22:00（root cron 定时任务） | 当日服药情况汇总 + 所有打卡照片 |
-| 在线重复打卡（Flask 后台线程） | 即时告警 + 重复打卡照片 |
+| 触发条件 | 邮件内容 | 服务器照片处理 |
+|----------|----------|---------------|
+| 每日22:00（root cron） | 当日服药汇总 + 当天所有打卡照片 | 发送后删除当天全部照片 |
+| 在线重复打卡（Flask 后台线程） | 即时告警 + 重复打卡照片 | **发送后立即删除该重复照片** |
 
-**工作原理**：SMTP 配置（QQ邮箱等）存储在 systemd 环境变量中，不在 cron 环境变量中。`daily_email.py` 和 `test_email.py` 通过 `get_service_env()` 函数自动从 systemd 服务读取配置，确保 cron 定时任务能正常发送邮件。
+**工作原理**：SMTP 配置存储在 systemd 环境变量中。`daily_email.py` 和 `test_email.py` 通过 `get_service_env()` 函数从 `systemctl show pillguard` 读取配置，解决 cron 环境无环境变量的问题。
 
-邮件发送后服务器自动删除已发送的照片文件。
+**照片存储路径**：服务器 `/var/pillguard/uploads/`，手机 `/data/data/com.pillguard.app/files/pillsguard_photos/`（APP 私有，相册不可见）。
 
 **测试邮件**：
 ```bash

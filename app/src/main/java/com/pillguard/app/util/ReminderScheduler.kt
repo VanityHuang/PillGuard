@@ -5,8 +5,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import com.pillguard.app.receiver.ReminderReceiver
+import com.pillguard.app.ui.MainActivity
 import java.util.Calendar
 
 object ReminderScheduler {
@@ -42,15 +45,12 @@ object ReminderScheduler {
             set(Calendar.MINUTE, minute)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-            // 如果时间已过，设置到明天
             if (timeInMillis <= System.currentTimeMillis()) {
                 add(Calendar.DAY_OF_YEAR, 1)
             }
         }
 
-        // 使用精确闹钟确保准时提醒，每次触发后重新调度实现每日重复
-        setExactAlarm(alarmManager, calendar.timeInMillis, pendingIntent)
-
+        setAlarm(context, alarmManager, calendar.timeInMillis, pendingIntent)
         Log.d(TAG, "提醒已设置: $timeSlot at ${calendar.time}")
     }
 
@@ -77,9 +77,7 @@ object ReminderScheduler {
         )
 
         val triggerTime = System.currentTimeMillis() + 5 * 60 * 1000 // 5分钟后
-
-        setExactAlarm(alarmManager, triggerTime, pendingIntent)
-
+        setAlarm(context, alarmManager, triggerTime, pendingIntent)
         Log.d(TAG, "重试提醒已设置: $timeSlot, 第${retryCount}次, 5分钟后触发")
     }
 
@@ -105,17 +103,67 @@ object ReminderScheduler {
         }
     }
 
-    private fun setExactAlarm(alarmManager: AlarmManager, triggerTime: Long, pendingIntent: PendingIntent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+    /**
+     * 使用 setAlarmClock 设置闹钟（厂商 ROM 兼容性更好）。
+     * 如果精准闹钟权限未授权，回退到 setAndAllowWhileIdle。
+     */
+    private fun setAlarm(context: Context, alarmManager: AlarmManager, triggerTime: Long, pendingIntent: PendingIntent) {
+        // 构建 showIntent：用户点击状态栏闹钟图标时打开 MainActivity
+        val showIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val showPendingIntent = PendingIntent.getActivity(
+            context, 0, showIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                val alarmInfo = AlarmManager.AlarmClockInfo(triggerTime, showPendingIntent)
+                alarmManager.setAlarmClock(alarmInfo, pendingIntent)
+                Log.d(TAG, "使用 setAlarmClock: triggerTime=$triggerTime")
             } else {
-                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
             }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+        } catch (e: SecurityException) {
+            // 如果没有 SCHEDULE_EXACT_ALARM 权限（API 31+），setAlarmClock 会抛异常
+            Log.w(TAG, "无精准闹钟权限，回退到 setAndAllowWhileIdle")
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                } else {
+                    alarmManager.set(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+                }
+            } catch (e2: Exception) {
+                Log.e(TAG, "设置闹钟失败", e2)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "setAlarmClock 失败，尝试回退", e)
+            try {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            } catch (e2: Exception) {
+                Log.e(TAG, "回退闹钟也失败", e2)
+            }
+        }
+    }
+
+    /** 检查是否已关闭电池优化 */
+    fun isBatteryOptimizationDisabled(context: Context): Boolean {
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            powerManager.isIgnoringBatteryOptimizations(context.packageName)
         } else {
-            alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
+            true // API < 23，无需检查
+        }
+    }
+
+    /** 检查是否可以调度精准闹钟（API 31+） */
+    fun canScheduleExactAlarms(context: Context): Boolean {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            alarmManager.canScheduleExactAlarms()
+        } else {
+            true // API < 31，默认可以
         }
     }
 }
