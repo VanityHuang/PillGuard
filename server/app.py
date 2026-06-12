@@ -343,6 +343,117 @@ def health_check():
     return jsonify(status='ok', timestamp=datetime.now().isoformat())
 
 
+# ============ 手动触发每日邮件 ============
+
+@app.route('/api/daily-report/trigger', methods=['POST'])
+@jwt_required()
+def trigger_daily_report():
+    """手动触发每日邮件发送。有记录则发送完整日报，无记录则发送空通知。"""
+    import subprocess as sp
+    import threading
+
+    # 先检查是否有未发送记录
+    db = get_db()
+    count = db.execute(
+        "SELECT COUNT(*) FROM medication_records WHERE emailed_at IS NULL"
+    ).fetchone()[0]
+
+    def run_script():
+        try:
+            result = sp.run(
+                ['/var/pillguard/venv/bin/python3', '/opt/pillguard/server/daily_email.py'],
+                capture_output=True, text=True, timeout=120
+            )
+            print(f"[{datetime.now()}] 手动日报: exit={result.returncode}")
+            if result.stdout:
+                for line in result.stdout.strip().split('\n')[-10:]:
+                    print(f"  {line}")
+        except sp.TimeoutExpired:
+            print(f"[{datetime.now()}] 手动日报: 超时")
+        except Exception as e:
+            print(f"[{datetime.now()}] 手动日报失败: {str(e)}")
+
+    if count > 0:
+        # 有未发送记录 → 执行完整的 daily_email.py
+        thread = threading.Thread(target=run_script, daemon=True)
+        thread.start()
+        return jsonify(success=True, message=f'日报发送任务已启动（{count} 条未发送记录），完成后将发送至您的邮箱')
+    else:
+        # 无未发送记录 → 发送一封简短的"今日无记录"通知邮件
+        def send_empty_notification():
+            try:
+                today_str = datetime.now().strftime('%Y年%m月%d日')
+                msg = MIMEText(
+                    f'PillGuard 服药日报\n\n'
+                    f'日期：{today_str}\n\n'
+                    f'今天暂无服药打卡记录。\n\n'
+                    f'这是一封自动通知邮件，表示 PillGuard 系统运行正常，但今日尚未收到打卡数据。\n'
+                    f'如果您刚刚手动触发了日报发送，而今天确实还没有打卡，请忽略此邮件。',
+                    'plain', 'utf-8'
+                )
+                msg['Subject'] = f'[PillGuard] 每日服药报告 - {today_str}（无记录）'
+                msg['From'] = f'PillGuard <{SMTP_USER}>'
+                msg['To'] = ADMIN_EMAIL
+
+                if SMTP_USE_SSL:
+                    server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+                elif SMTP_USE_TLS:
+                    server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+                    server.starttls()
+                else:
+                    server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                server.sendmail(SMTP_USER, ADMIN_EMAIL, msg.as_string())
+                server.quit()
+                print(f"[{datetime.now()}] 手动日报: 无未发送记录，已发送空通知邮件")
+            except Exception as e:
+                print(f"[{datetime.now()}] 手动日报空通知发送失败: {str(e)}")
+
+        thread = threading.Thread(target=send_empty_notification, daemon=True)
+        thread.start()
+        return jsonify(success=True, message='今天暂无打卡记录，已发送空通知邮件至您的邮箱')
+
+
+# ============ 邮件测试 ============
+
+@app.route('/api/test/email', methods=['POST'])
+@jwt_required()
+def test_email():
+    """发送测试邮件，验证 SMTP 配置是否正确"""
+    try:
+        msg = MIMEText(
+            f'PillGuard 测试邮件发送成功！\n\n'
+            f'发送时间：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}\n'
+            f'SMTP 服务器：{SMTP_HOST}:{SMTP_PORT}\n'
+            f'收件邮箱：{ADMIN_EMAIL}\n\n'
+            f'如果您收到此邮件，说明 PillGuard 邮件配置正确。',
+            'plain', 'utf-8'
+        )
+        msg['Subject'] = '[PillGuard] 邮件发送测试'
+        msg['From'] = f'PillGuard <{SMTP_USER}>'
+        msg['To'] = ADMIN_EMAIL
+
+        if SMTP_USE_SSL:
+            server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT)
+        elif SMTP_USE_TLS:
+            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+            server.starttls()
+        else:
+            server = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
+
+        server.login(SMTP_USER, SMTP_PASSWORD)
+        server.sendmail(SMTP_USER, ADMIN_EMAIL, msg.as_string())
+        server.quit()
+
+        print(f"[{datetime.now()}] 测试邮件发送成功")
+        return jsonify(success=True, message='测试邮件发送成功，请检查收件箱')
+
+    except Exception as e:
+        print(f"[{datetime.now()}] 测试邮件发送失败: {str(e)}")
+        return jsonify(success=False, message=f'邮件发送失败: {str(e)}'), 500
+
+
 if __name__ == '__main__':
     init_db()
     app.run(host='0.0.0.0', port=5000, ssl_context='adhoc')

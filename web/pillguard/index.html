@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>PillGuard — 服药管理</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- ============================================================
+    Top Navigation Bar
+    ============================================================ -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <span class="icon">💊</span>
+            <span>PillGuard</span>
+        </div>
+        <div class="navbar-right">
+            <span id="status-dot" class="status-dot" title="检查服务状态"></span>
+            <span id="status-text" class="status-text">检查中...</span>
+            <button class="btn btn-outline btn-sm" id="email-btn" onclick="sendTestEmail()" title="发送测试邮件验证SMTP配置">📧 测试邮件</button>
+            <button class="btn btn-outline btn-sm" id="gallery-btn" onclick="toggleGallery()" title="查看服务端暂存照片">📷 照片</button>
+            <button class="btn btn-outline btn-sm" onclick="PillGuardAPI.logout()">登出</button>
+        </div>
+    </nav>
+
+    <!-- ============================================================
+    Today's Status Banner
+    ============================================================ -->
+    <div class="today-banner" id="today-banner">
+        <div class="today-banner-date" id="banner-date">—</div>
+        <div class="today-banner-slots">
+            <div class="banner-slot" id="banner-morning">
+                <span class="banner-slot-icon">🌅</span>
+                <span class="banner-slot-label">早</span>
+                <span class="banner-slot-status" id="banner-morning-status">—</span>
+            </div>
+            <div class="banner-slot" id="banner-evening">
+                <span class="banner-slot-icon">🌙</span>
+                <span class="banner-slot-label">晚</span>
+                <span class="banner-slot-status" id="banner-evening-status">—</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+    Monthly Stats Bar
+    ============================================================ -->
+    <div class="stats-bar" id="stats-bar">
+        <div class="stats-items">
+            <div class="stat-item">
+                <span class="stat-value" id="stat-rate">—</span>
+                <span class="stat-label">本月打卡率</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="stat-days">—</span>
+                <span class="stat-label">打卡天数</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-value" id="stat-total">—</span>
+                <span class="stat-label">总打卡次数</span>
+            </div>
+        </div>
+        <button class="btn btn-outline btn-sm" id="report-btn" onclick="triggerDailyReport()" title="手动发送当日服药报告邮件">📊 发送日报</button>
+    </div>
+
+    <!-- ============================================================
+    Filter Bar
+    ============================================================ -->
+    <div class="filter-bar">
+        <div class="month-nav">
+            <button class="btn-icon" onclick="PillGuardCalendar.navigateMonth(-1)" title="上个月" aria-label="上个月">◀</button>
+            <span class="month-label" id="month-label">—</span>
+            <button class="btn-icon" onclick="PillGuardCalendar.navigateMonth(1)" title="下个月" aria-label="下个月">▶</button>
+            <button class="btn btn-outline btn-sm" onclick="PillGuardCalendar.goToToday()" style="margin-left:4px">今天</button>
+        </div>
+        <div class="filter-selects">
+            <select class="form-select" id="filter-timeslot" onchange="PillGuardCalendar.setFilterTimeSlot(this.value)">
+                <option value="all">全部时段</option>
+                <option value="morning">早 (2–14点)</option>
+                <option value="evening">晚 (14–次日2点)</option>
+            </select>
+            <select class="form-select" id="filter-status" onchange="PillGuardCalendar.setFilterStatus(this.value)">
+                <option value="all">全部状态</option>
+                <option value="normal">正常打卡</option>
+                <option value="duplicate">重复打卡</option>
+                <option value="missed">未打卡</option>
+            </select>
+        </div>
+    </div>
+
+    <!-- ============================================================
+    Calendar Grid
+    ============================================================ -->
+    <div class="calendar-container">
+        <div class="calendar-header">
+            <span class="day-name">日</span>
+            <span class="day-name">一</span>
+            <span class="day-name">二</span>
+            <span class="day-name">三</span>
+            <span class="day-name">四</span>
+            <span class="day-name">五</span>
+            <span class="day-name">六</span>
+        </div>
+        <div class="calendar-grid" id="calendar-grid">
+            <!-- Dynamically rendered by calendar.js -->
+        </div>
+    </div>
+
+    <!-- ============================================================
+    Day Detail Panel
+    ============================================================ -->
+    <div class="detail-panel" id="detail-panel">
+        <div class="detail-header">
+            <span class="detail-date" id="detail-date">—</span>
+            <button class="detail-close" onclick="PillGuardCalendar.closeDetail()" title="关闭" aria-label="关闭详情">✕</button>
+        </div>
+        <div class="detail-slots">
+            <div class="detail-slot" id="detail-morning">
+                <span class="slot-icon">🌅</span>
+                <div class="slot-info">
+                    <div class="slot-label">早上 (2:00 – 14:00)</div>
+                    <div class="slot-time">—</div>
+                </div>
+                <span class="slot-status missed">未打卡</span>
+            </div>
+            <div class="detail-slot" id="detail-evening">
+                <span class="slot-icon">🌙</span>
+                <div class="slot-info">
+                    <div class="slot-label">晚上 (14:00 – 次日 2:00)</div>
+                    <div class="slot-time">—</div>
+                </div>
+                <span class="slot-status missed">未打卡</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================
+    Photo Gallery Panel
+    ============================================================ -->
+    <div class="gallery-panel" id="gallery-panel">
+        <div class="gallery-header">
+            <h2 class="gallery-title">📷 服务端暂存照片</h2>
+            <button class="detail-close" onclick="toggleGallery()" title="关闭" aria-label="关闭照片">✕</button>
+        </div>
+        <p class="gallery-hint">仅显示当前服务器上暂存的打卡照片（每日 22:00 邮件发送后自动删除）</p>
+        <div class="photo-grid" id="photo-grid">
+            <!-- Dynamically populated -->
+        </div>
+        <div class="empty-state" id="gallery-empty" style="display:none">
+            <div class="icon">📭</div>
+            <p>暂无照片</p>
+        </div>
+    </div>
+
+    <!-- ============================================================
+    Lightbox (full-size photo viewer)
+    ============================================================ -->
+    <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+        <button class="lightbox-close" onclick="closeLightbox()" aria-label="关闭">✕</button>
+        <button class="lightbox-prev" id="lightbox-prev" onclick="event.stopPropagation(); navigateLightbox(-1)" aria-label="上一张">‹</button>
+        <img class="lightbox-img" id="lightbox-img" src="" alt="打卡照片" onclick="event.stopPropagation()">
+        <button class="lightbox-next" id="lightbox-next" onclick="event.stopPropagation(); navigateLightbox(1)" aria-label="下一张">›</button>
+        <div class="lightbox-info" id="lightbox-info"></div>
+    </div>
+
+    <!-- ============================================================
+    Scripts
+    ============================================================ -->
+    <script src="js/api.js"></script>
+    <script src="js/calendar.js"></script>
+    <script>
+        (function () {
+            // Guard: not logged in → redirect to login
+            if (!PillGuardAPI.isLoggedIn()) {
+                window.location.href = '/pillguard/login/';
+                return;
+            }
+
+            // Health check
+            async function updateStatus() {
+                const dot = document.getElementById('status-dot');
+                const text = document.getElementById('status-text');
+                const healthy = await PillGuardAPI.checkHealth();
+                if (healthy) {
+                    dot.className = 'status-dot';
+                    dot.title = '服务正常';
+                    text.textContent = '服务正常';
+                } else {
+                    dot.className = 'status-dot offline';
+                    dot.title = '服务异常';
+                    text.textContent = '服务异常';
+                }
+            }
+
+            updateStatus();
+
+            // Initialize calendar
+            PillGuardCalendar.init();
+        })();
+
+        // ============================================================
+        // Photo Gallery
+        // ============================================================
+        let galleryPhotos = [];      // { photoUrl, date, timeSlot, blobUrl }
+        let lightboxIndex = -1;
+
+        async function toggleGallery() {
+            const panel = document.getElementById('gallery-panel');
+            const isOpen = panel.classList.contains('show');
+
+            if (isOpen) {
+                panel.classList.remove('show');
+                // Clean up blob URLs
+                galleryPhotos.forEach(p => {
+                    if (p.blobUrl) PillGuardAPI.revokeBlobUrl(p.blobUrl);
+                });
+                galleryPhotos = [];
+            } else {
+                panel.classList.add('show');
+                await loadGalleryPhotos();
+            }
+        }
+
+        async function loadGalleryPhotos() {
+            const grid = document.getElementById('photo-grid');
+            const empty = document.getElementById('gallery-empty');
+
+            grid.innerHTML = '<div style="text-align:center;padding:24px"><span class="spinner spinner-dark"></span> 加载中...</div>';
+            empty.style.display = 'none';
+
+            // Fetch records for the last 30 days (photo retention window)
+            const today = new Date();
+            const endDate = formatDateStr(today.getFullYear(), today.getMonth() + 1, today.getDate());
+            const start = new Date(today);
+            start.setDate(start.getDate() - 30);
+            const startDate = formatDateStr(start.getFullYear(), start.getMonth() + 1, start.getDate());
+
+            try {
+                const records = await PillGuardAPI.getRecords(startDate, endDate);
+                const withPhotos = records.filter(r => r.photoUrl);
+
+                if (withPhotos.length === 0) {
+                    grid.innerHTML = '';
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                // Load each photo as blob URL
+                const photoItems = [];
+                for (const rec of withPhotos) {
+                    try {
+                        const blobUrl = await PillGuardAPI.fetchPhotoBlobUrl(rec.photoUrl);
+                        photoItems.push({
+                            photoUrl: rec.photoUrl,
+                            date: rec.date,
+                            timeSlot: rec.timeSlot === 'morning' ? '早' : '晚',
+                            blobUrl: blobUrl,
+                        });
+                    } catch (e) {
+                        // Skip photos that fail to load (e.g., already deleted)
+                        console.warn('Failed to load photo:', rec.photoUrl, e.message);
+                    }
+                }
+
+                galleryPhotos = photoItems;
+
+                if (photoItems.length === 0) {
+                    grid.innerHTML = '';
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                // Render thumbnail grid
+                grid.innerHTML = photoItems.map((p, i) => `
+                    <div class="photo-thumb" onclick="openLightbox(${i})">
+                        <img src="${p.blobUrl}" alt="${p.date} ${p.timeSlot}" loading="lazy">
+                        <div class="photo-thumb-label">${p.date} ${p.timeSlot}</div>
+                    </div>
+                `).join('');
+
+            } catch (err) {
+                grid.innerHTML = '';
+                empty.innerHTML = '<div class="icon">⚠️</div><p>加载失败：' + err.message + '</p>';
+                empty.style.display = 'block';
+            }
+        }
+
+        function openLightbox(index) {
+            lightboxIndex = index;
+            const lb = document.getElementById('lightbox');
+            const img = document.getElementById('lightbox-img');
+            const info = document.getElementById('lightbox-info');
+            const photo = galleryPhotos[index];
+
+            img.src = photo.blobUrl;
+            info.textContent = `${photo.date} ${photo.timeSlot} (${index + 1} / ${galleryPhotos.length})`;
+
+            updateLightboxNav();
+            lb.classList.add('show');
+            document.body.style.overflow = 'hidden';
+
+            // Keyboard navigation
+            document.addEventListener('keydown', onLightboxKey);
+        }
+
+        function closeLightbox() {
+            const lb = document.getElementById('lightbox');
+            lb.classList.remove('show');
+            document.body.style.overflow = '';
+            lightboxIndex = -1;
+            document.removeEventListener('keydown', onLightboxKey);
+        }
+
+        function navigateLightbox(delta) {
+            const newIndex = lightboxIndex + delta;
+            if (newIndex >= 0 && newIndex < galleryPhotos.length) {
+                openLightbox(newIndex);
+            }
+        }
+
+        function updateLightboxNav() {
+            document.getElementById('lightbox-prev').style.visibility = lightboxIndex > 0 ? 'visible' : 'hidden';
+            document.getElementById('lightbox-next').style.visibility = lightboxIndex < galleryPhotos.length - 1 ? 'visible' : 'hidden';
+        }
+
+        function onLightboxKey(e) {
+            if (e.key === 'Escape') closeLightbox();
+            if (e.key === 'ArrowLeft') navigateLightbox(-1);
+            if (e.key === 'ArrowRight') navigateLightbox(1);
+        }
+
+        function formatDateStr(y, m, d) {
+            const mm = String(m).padStart(2, '0');
+            const dd = String(d).padStart(2, '0');
+            return `${y}-${mm}-${dd}`;
+        }
+
+        // ============================================================
+        // Test Email
+        // ============================================================
+        async function sendTestEmail() {
+            const btn = document.getElementById('email-btn');
+            const origText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>发送中...';
+
+            try {
+                const result = await PillGuardAPI.sendTestEmail();
+                showPageToast(result.message, 'success');
+            } catch (err) {
+                showPageToast(err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            }
+        }
+
+        function showPageToast(message, type) {
+            document.querySelectorAll('.toast').forEach(t => t.remove());
+            const toast = document.createElement('div');
+            toast.className = `toast toast-${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        // ============================================================
+        // Today Banner + Monthly Stats
+        // ============================================================
+        function renderTodayBanner(recordMap) {
+            const today = new Date();
+            const todayStr = formatDateStr(today.getFullYear(), today.getMonth() + 1, today.getDate());
+            const weekdays = ['日', '一', '二', '三', '四', '五', '六'];
+
+            document.getElementById('banner-date').textContent =
+                `${todayStr} 星期${weekdays[today.getDay()]}`;
+
+            const dayRecs = recordMap && recordMap[todayStr]
+                ? recordMap[todayStr]
+                : { morning: null, evening: null };
+
+            renderBannerSlot('morning', dayRecs.morning);
+            renderBannerSlot('evening', dayRecs.evening);
+        }
+
+        function renderBannerSlot(slot, rec) {
+            const el = document.getElementById(`banner-${slot}-status`);
+            if (!rec || !rec.completed) {
+                el.textContent = '未打卡';
+                el.className = 'banner-slot-status missed';
+            } else if (rec.isDuplicate) {
+                const time = formatTime(rec.takenAt);
+                el.textContent = time ? `重复 ${time}` : '重复打卡';
+                el.className = 'banner-slot-status duplicate';
+            } else {
+                const time = formatTime(rec.takenAt);
+                el.textContent = time || '已打卡';
+                el.className = 'banner-slot-status normal';
+            }
+        }
+
+        function formatTime(isoStr) {
+            if (!isoStr) return '';
+            try {
+                const d = new Date(isoStr);
+                if (isNaN(d.getTime())) return '';
+                return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+            } catch { return ''; }
+        }
+
+        function renderMonthlyStats(records) {
+            const today = new Date();
+            const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+            const todayDate = today.getDate();
+
+            // Count unique days that have at least one completed record
+            const completedDays = new Set();
+            let totalCheckins = 0;
+            for (const rec of records) {
+                if (rec.completed) {
+                    completedDays.add(rec.date);
+                    totalCheckins++;
+                }
+            }
+
+            // Only count days up to today (not future days)
+            const eligibleDays = Math.min(todayDate, daysInMonth);
+            const rate = eligibleDays > 0 ? Math.round((completedDays.size / eligibleDays) * 100) : 0;
+
+            document.getElementById('stat-rate').textContent = rate + '%';
+            document.getElementById('stat-days').textContent = completedDays.size + '/' + eligibleDays;
+            document.getElementById('stat-total').textContent = totalCheckins;
+        }
+
+        // Register callbacks with calendar
+        PillGuardCalendar.onRecordsUpdated((records, recordMap) => {
+            renderTodayBanner(recordMap);
+            renderMonthlyStats(records);
+        });
+
+        // ============================================================
+        // Manual Daily Report Trigger
+        // ============================================================
+        async function triggerDailyReport() {
+            const btn = document.getElementById('report-btn');
+            const origText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>发送中...';
+
+            try {
+                const resp = await fetch('/pillguard/api/daily-report/trigger', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + PillGuardAPI.getToken()
+                    }
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success) {
+                    showPageToast(data.message, 'success');
+                } else {
+                    throw new Error(data.message || '发送失败');
+                }
+            } catch (err) {
+                showPageToast(err.message || '请求失败', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = origText;
+            }
+        }
+    </script>
+</body>
+</html>

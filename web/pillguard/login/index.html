@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>PillGuard — 登录</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        /* Additional login-specific overrides if needed */
+    </style>
+</head>
+<body class="login-page">
+    <div class="login-card">
+        <div class="login-logo">
+            <div class="icon">💊</div>
+            <h1>PillGuard</h1>
+            <p>服药打卡管理</p>
+        </div>
+
+        <div id="login-error" class="login-error"></div>
+
+        <form id="login-form" class="login-form" novalidate>
+            <div class="form-group">
+                <label class="form-label" for="username">用户名</label>
+                <input
+                    class="form-input"
+                    type="text"
+                    id="username"
+                    name="username"
+                    placeholder="请输入用户名"
+                    autocomplete="username"
+                    required
+                    autofocus
+                >
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">密码</label>
+                <input
+                    class="form-input"
+                    type="password"
+                    id="password"
+                    name="password"
+                    placeholder="请输入密码"
+                    autocomplete="current-password"
+                    required
+                >
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="login-btn">
+                登 录
+            </button>
+        </form>
+
+        <div class="login-footer">
+            PillGuard &copy; 2026
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('login-form');
+        const btn = document.getElementById('login-btn');
+        const errorEl = document.getElementById('login-error');
+        const usernameInput = document.getElementById('username');
+        const passwordInput = document.getElementById('password');
+
+        function showError(msg) {
+            errorEl.textContent = msg;
+            errorEl.classList.add('show');
+        }
+
+        function hideError() {
+            errorEl.textContent = '';
+            errorEl.classList.remove('show');
+        }
+
+        function setLoading(loading) {
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span>登录中...';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '登 录';
+            }
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            hideError();
+
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value;
+
+            if (!username || !password) {
+                showError('请输入用户名和密码');
+                return;
+            }
+
+            setLoading(true);
+
+            try {
+                const resp = await fetch('/pillguard/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                const data = await resp.json();
+
+                if (!resp.ok || !data.success) {
+                    throw new Error(data.message || '登录失败');
+                }
+
+                // Save auth
+                localStorage.setItem('pillguard_token', data.token);
+                localStorage.setItem('pillguard_userId', data.userId);
+
+                // Redirect to dashboard
+                window.location.href = '/pillguard/';
+
+            } catch (err) {
+                showError(err.message || '无法连接到服务器');
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        // If already logged in, redirect to dashboard
+        if (localStorage.getItem('pillguard_token')) {
+            window.location.href = '/pillguard/';
+        }
+    </script>
+</body>
+</html>

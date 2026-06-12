@@ -25,6 +25,11 @@ sudo journalctl -u pillguard --no-pager -n 20    # 查看服务日志
 sudo tail -30 /var/pillguard/logs/daily_email.log  # 查看每日邮件日志
 sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py  # 测试 SMTP 邮件
 sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /etc/nginx/sites-available/yellowduck 后）
+
+# Web 管理面板部署
+ssh root@47.106.163.25 "mkdir -p /var/www/yellowduck/pillguard/{css,js,login}"
+scp -r web/pillguard/* root@47.106.163.25:/var/www/yellowduck/pillguard/
+ssh root@47.106.163.25 "chown -R www-data:www-data /var/www/yellowduck/pillguard/"
 ```
 
 项目使用 JDK 17、Kotlin 1.9.20、AGP 8.1.4、KSP（用于 Room 注解处理），启用了 ViewBinding。最低 SDK 26，目标 SDK 34。源码/目标兼容性为 Java 11。**Release 构建切勿开启 `minifyEnabled true`**（R8 混淆会导致登录功能故障）。
@@ -83,8 +88,10 @@ sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /
 **Nginx 路由架构**（生产环境）：
 - Nginx 同时监听 80（HTTP）和 443（HTTPS，Let's Encrypt 证书，域名 `yellowduck.top`）
 - `location /api/` → `127.0.0.1:5000`（gunicorn / Flask API）
+- `location /pillguard/` → 静态文件 `/var/www/yellowduck/pillguard/`（Web 管理面板）
+- `location /pillguard/api/` → `127.0.0.1:5000`（路径重写剥离 `/pillguard` 前缀，转发到 Flask `/api/`）
 - `location /` → `127.0.0.1:8080`（Node.js 前端服务）
-- HTTP 下 `/api/` **不强制跳转 HTTPS**，确保 Android 客户端 IP 直连不受 SSL 主机名限制
+- HTTP 下 `/api/` 和 `/pillguard/` **不强制跳转 HTTPS**，确保 Android 客户端 IP 直连不受 SSL 主机名限制
 
 单个 Flask 应用（`server/app.py`），端点：
 - `POST /api/auth/login`、`/api/auth/register`、`/api/auth/refresh` — JWT 认证
@@ -92,6 +99,8 @@ sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /
 - `GET /api/records` — 按 userId + 日期范围查询
 - `GET /api/photos/<filename>` — 照片文件访问
 - `GET /api/health` — 健康检查
+- `POST /api/test/email` — 测试邮件发送（JWT 保护），验证 SMTP 配置
+- `POST /api/daily-report/trigger` — 手动触发日报；有未发送记录则执行 daily_email.py，无记录则发送空通知邮件
 
 数据库：SQLite，路径 `/var/pillguard/pillguard.db`。两张表：`users` 和 `medication_records`。
 
@@ -105,6 +114,29 @@ sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /
 - 正常打卡照片：上传 → 保留到 22:00 → `daily_email.py` 作为邮件附件发送 → 标记 `emailed_at` → 删除照片
 - 重复打卡照片：上传 → `send_duplicate_alert_email()` 立即发邮件 → **立即删除**（不等到 22:00）
 - 存储路径：`/var/pillguard/uploads/{user_id}_{date}_{timeSlot}_{uuid}.jpg`
+
+### Web 管理面板 — 纯 HTML/CSS/JS
+
+部署在 `/var/www/yellowduck/pillguard/`，通过 Nginx 提供访问。Flask 零改动 — 通过 Nginx `location /pillguard/api/` 将路径 `/pillguard/api/*` 重写为 `/api/*` 后转发给 Flask。
+
+**文件结构：** `web/pillguard/` 目录
+- `index.html` — 控制页：导航栏（状态 + 测试邮件 + 照片 + 登出）+ 今日横幅 + 月度统计 + 月历 + 日详情面板 + 照片画廊 + 灯箱
+- `login/index.html` — 登录页：用户名密码表单，JWT 存 localStorage
+- `css/style.css` — 响应式样式（移动端 / 768px / 1024px 三断点），CSS 变量主题
+- `js/api.js` — `PillGuardAPI` 模块：fetch 封装、JWT 管理、401 自动跳转、照片 blob 加载、测试邮件、手动日报
+- `js/calendar.js` — `PillGuardCalendar` 模块：月历渲染、数据加载、回调通知、详情面板、筛选器
+
+**关键设计：**
+- JWT 存 `localStorage`，所有 API 请求通过 `apiFetch()` 自动带 `Authorization: Bearer`
+- 401 → 自动清除 token → 跳转 `/pillguard/login/`
+- 照片通过 `fetchPhotoBlobUrl()` 带 JWT 头加载（`<img>` 标签无法设置 Authorization 头，所以用 fetch → blob → URL.createObjectURL）
+- 日历加载数据后通过 `onRecordsUpdated` 回调通知横幅和统计刷新
+- 未来日期不展示打卡状态圆点，半透明样式区分
+- **打卡颜色**：正常=绿色 `#22C55E`，重复=紫色 `#8B5CF6`，未打卡=红色 `#EF4444`
+
+**访问路径：**
+- `https://yellowduck.top/pillguard/` — 控制页（未登录自动跳转登录）
+- `https://yellowduck.top/pillguard/login/` — 登录页（已登录自动跳转控制页）
 
 ### Release 签名
 
@@ -121,3 +153,6 @@ sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /
 - PillGuard systemd 服务 Type=simple，修改 app.py 后需 `sudo systemctl restart pillguard`（不支持 reload）
 - `network_security_config.xml` 中同时配置了 `47.106.163.25` 和 `yellowduck.top` 的 cleartext 允许
 - 照片迁移标记存储在 `pillguard_migration` SharedPreferences 的 `migrated_to_v2` 键，设为 false 可重新触发旧照片清理
+- Web 管理面板调用 `/pillguard/api/*`，Nginx 剥离 `/pillguard` 前缀后转发到 Flask `/api/*`。Flask 代码中无需出现 `/pillguard` 路径
+- `POST /api/daily-report/trigger` 手动触发日报：先查 DB 是否有未发送记录，有则执行 `daily_email.py`，无则发送空通知邮件
+- Web 面板照片加载使用 `fetch` + blob URL 方式（因为 `<img>` 标签无法带 Authorization 头），关闭面板时需 `revokeObjectURL` 释放内存

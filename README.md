@@ -13,6 +13,7 @@
 - **数据同步**：在线登录后自动同步服务器记录，照片通过WorkManager后台上传，成功后自动删除本地副本
 - **每日邮件**：服务器22:00自动发送当日服药汇总邮件（含照片附件）；重复打卡立即发送即时告警
 - **提醒设置**：可自由开关震动/响铃/弹窗，支持测试提醒；**电池优化**和**精准闹钟权限**状态一目了然，一键跳转系统设置
+- **Web 管理面板**：浏览器访问 `https://yellowduck.top/pillguard/`，支持月历打卡视图、照片预览、今日打卡横幅、月度统计、测试邮件、手动触发日报
 
 ## 技术栈
 
@@ -20,6 +21,7 @@
 |------|------|
 | Android客户端 | Kotlin, Room, CameraX, WorkManager, AlarmManager, Retrofit |
 | 服务器端 | Python, Flask, Gunicorn, Nginx, SQLite |
+| Web 管理面板 | 纯 HTML/CSS/JS（无框架），响应式布局 |
 | 安全 | AndroidKeyStore AES-GCM加密, JWT认证, HTTPS |
 
 ## 环境要求
@@ -172,6 +174,37 @@ ls -lh /var/pillguard/uploads/
 sqlite3 /var/pillguard/pillguard.db "SELECT mr.date, mr.time_slot, mr.is_duplicate, u.username FROM medication_records mr JOIN users u ON mr.user_id=u.id ORDER BY mr.date DESC LIMIT 10;"
 ```
 
+## Web 管理面板
+
+浏览器访问 `https://yellowduck.top/pillguard/`，使用与 APP 相同的账号密码登录。
+
+### 功能
+
+| 功能 | 说明 |
+|------|------|
+| **月历视图** | 当月日历网格，早晚两个状态圆点（绿=正常，紫=重复，红=未打卡） |
+| **今日横幅** | 顶部醒目显示今天早/晚打卡状态和时间 |
+| **月度统计** | 本月打卡率、打卡天数、总打卡次数 |
+| **点击详情** | 点击日历某天，展开显示早晚打卡具体时间和状态 |
+| **时段/状态筛选** | 按月历筛选时段（早/晚）和状态（正常/重复/未打卡） |
+| **照片预览** | 查看服务端暂存照片（缩略图网格 + 点击放大灯箱） |
+| **测试邮件** | 一键发送测试邮件，验证 SMTP 配置 |
+| **手动日报** | 手动触发 `daily_email.py`，有记录发送完整报告，无记录发送空通知 |
+| **响应式布局** | 自动适配手机 / 平板 / 桌面 |
+
+### 部署
+
+Web 面板文件位于仓库 `web/pillguard/` 目录，部署到服务器 `/var/www/yellowduck/pillguard/`：
+
+```bash
+# 创建目录并复制文件
+ssh root@47.106.163.25 "mkdir -p /var/www/yellowduck/pillguard/{css,js,login}"
+scp -r web/pillguard/* root@47.106.163.25:/var/www/yellowduck/pillguard/
+ssh root@47.106.163.25 "chown -R www-data:www-data /var/www/yellowduck/pillguard/"
+```
+
+Nginx 已配置 `/pillguard/` 静态文件路由和 `/pillguard/api/` API 代理（自动剥离前缀转发到 Flask `/api/`）。
+
 ### 域名与 SSL
 
 服务器支持通过域名 `yellowduck.top`（Let's Encrypt 证书）和 IP `47.106.163.25` 访问：
@@ -228,6 +261,15 @@ PillGuard/
     ├── manage_user.py                         # 用户管理脚本
     ├── deploy.sh                              # 一键部署脚本
     └── requirements.txt                       # Python依赖
+└── web/pillguard/                             # Web 管理面板
+    ├── index.html                             # 控制页（日历 + 统计 + 照片）
+    ├── login/
+    │   └── index.html                         # 登录页
+    ├── css/
+    │   └── style.css                          # 响应式样式
+    └── js/
+        ├── api.js                             # API 封装（JWT管理）
+        └── calendar.js                        # 日历组件
 ```
 
 ## 邮件通知机制
