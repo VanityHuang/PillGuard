@@ -54,9 +54,9 @@ ssh root@47.106.163.25 "chown -R www-data:www-data /var/www/yellowduck/pillguard
 - 旧版（MediaStore `Pictures/PillGuard/`）遗留照片由 `PillGuardApp` 一次性迁移清理
 
 **网络层**（`network/`）：
-- `ApiClient` — 单例 Retrofit 封装，使用前必须 `init(baseUrl, authToken)`。含日志拦截器和认证拦截器
+- `ApiClient` — 单例 Retrofit 封装，使用前必须 `init(baseUrl, authToken)`。含日志拦截器和认证拦截器。**`saveBaseUrl()`/`restoreBaseUrl()` 持久化服务器地址**，防止进程重启后回退到占位符 URL
 - `ApiService` — Retrofit 接口（登录、multipart 照片上传、记录查询、token 刷新）
-- `UploadWorker` — CoroutineWorker，上传照片到服务器。24 小时超时放弃 + 指数退避重试。适配内部存储文件路径（兼容旧 content:// URI）。约束：网络已连接 + 电量非低
+- `UploadWorker` — CoroutineWorker，上传照片到服务器。24 小时超时放弃 + 指数退避重试。适配内部存储文件路径（兼容旧 content:// URI）。约束：网络已连接 + 电量非低。**启动时调用 `restoreBaseUrl()` 恢复持久化的服务器地址**
 - `PhotoCleanupWorker` — PeriodicWorkRequest（每 6 小时），扫描 `pillsguard_photos/` 删除超过 24h 的本地照片
 
 **安全**（`security/SecurityManager`）：
@@ -156,3 +156,4 @@ ssh root@47.106.163.25 "chown -R www-data:www-data /var/www/yellowduck/pillguard
 - Web 管理面板调用 `/pillguard/api/*`，Nginx 剥离 `/pillguard` 前缀后转发到 Flask `/api/*`。Flask 代码中无需出现 `/pillguard` 路径
 - `POST /api/daily-report/trigger` 手动触发日报：先查 DB 是否有未发送记录，有则执行 `daily_email.py`，无则发送空通知邮件
 - Web 面板照片加载使用 `fetch` + blob URL 方式（因为 `<img>` 标签无法带 Authorization 头），关闭面板时需 `revokeObjectURL` 释放内存
+- **`ApiClient.saveBaseUrl()` 必须在登录成功后调用**，否则进程被杀后 `UploadWorker` 回退到占位符 URL `pillguard.example.com`，所有上传静默失败直至 24h 超时放弃
