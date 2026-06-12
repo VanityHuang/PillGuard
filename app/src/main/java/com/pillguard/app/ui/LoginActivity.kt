@@ -65,6 +65,12 @@ class LoginActivity : AppCompatActivity() {
         // 离线模式直接进入
         if (isOffline || serverUrl == null || username == null || password == null) {
             if (SecurityManager.isLoggedIn(this)) {
+                // 持久化已保存的服务器地址，确保 UploadWorker 进程重启后可用
+                serverUrl?.let { url ->
+                    val baseUrl = if (url.endsWith("/api/")) url else "${url}/api/"
+                    ApiClient.init(baseUrl)
+                    ApiClient.saveBaseUrl(this@LoginActivity, baseUrl)
+                }
                 navigateToMain()
                 return
             }
