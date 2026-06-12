@@ -89,6 +89,9 @@ class LoginActivity : AppCompatActivity() {
                     AuthManager.saveSession(this@LoginActivity, username, false)
                     ApiClient.setAuthToken(loginResponse.token)
 
+                    // 持久化 baseUrl，防止进程重启后 UploadWorker 丢失服务器地址
+                    ApiClient.saveBaseUrl(this@LoginActivity, baseUrl)
+
                     // 同步服务器记录到本地
                     syncRecordsFromServer()
 
@@ -176,6 +179,9 @@ class LoginActivity : AppCompatActivity() {
                     SecurityManager.saveCredentials(this@LoginActivity, loginResponse.userId, loginResponse.token)
                     AuthManager.saveSession(this@LoginActivity, username, false)
                     ApiClient.setAuthToken(loginResponse.token)
+
+                    // 持久化 baseUrl，防止进程重启后 UploadWorker 丢失服务器地址
+                    ApiClient.saveBaseUrl(this@LoginActivity, baseUrl)
 
                     // 保存登录信息用于下次自动登录
                     getSharedPreferences("pillguard_login", MODE_PRIVATE).edit()

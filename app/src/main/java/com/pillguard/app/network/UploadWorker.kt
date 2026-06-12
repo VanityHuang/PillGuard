@@ -97,6 +97,12 @@ class UploadWorker(context: Context, workerParams: WorkerParameters) : Coroutine
             }
             val (userId, token) = credentials
 
+            // 恢复持久化的 baseUrl，防止进程重启后使用占位符 URL
+            if (!ApiClient.restoreBaseUrl(context)) {
+                Log.w(TAG, "未找到持久化的服务器地址，使用默认值: ${ApiClient.getBaseUrl()}")
+            }
+            ApiClient.setAuthToken(token)
+
             val requestBody = file.asRequestBody("image/jpeg".toMediaTypeOrNull())
             val photoPart = MultipartBody.Part.createFormData("photo", file.name, requestBody)
             val userIdBody = userId.toRequestBody("text/plain".toMediaTypeOrNull())
@@ -104,7 +110,6 @@ class UploadWorker(context: Context, workerParams: WorkerParameters) : Coroutine
             val timeSlotBody = timeSlot.toRequestBody("text/plain".toMediaTypeOrNull())
             val isDuplicateBody = isDuplicate.toString().toRequestBody("text/plain".toMediaTypeOrNull())
 
-            ApiClient.setAuthToken(token)
             val response = ApiClient.apiService.uploadPhoto(photoPart, userIdBody, dateBody, timeSlotBody, isDuplicateBody)
 
             if (response.isSuccessful && response.body()?.success == true) {
