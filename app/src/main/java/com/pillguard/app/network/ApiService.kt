@@ -9,6 +9,7 @@ data class LoginRequest(val username: String, val password: String)
 data class LoginResponse(val token: String, val userId: String)
 data class UploadResponse(val success: Boolean, val message: String, val fileId: String? = null)
 data class ApiResponse(val success: Boolean, val message: String)
+data class HealthResponse(val status: String, val timestamp: String)
 
 interface ApiService {
 
@@ -34,6 +35,9 @@ interface ApiService {
 
     @POST("auth/refresh")
     suspend fun refreshToken(@Header("Authorization") token: String): Response<LoginResponse>
+
+    @GET("health")
+    suspend fun healthCheck(): Response<HealthResponse>
 }
 
 data class MedicationRecordDto(

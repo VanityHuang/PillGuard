@@ -148,6 +148,13 @@ class LoginActivity : AppCompatActivity() {
             binding.etPassword.error = "请输入密码"
             return
         }
+
+        // 开发者模式：用户名和密码都是 dev
+        if (username == "dev" && password == "dev") {
+            startActivity(Intent(this, DevModeActivity::class.java))
+            return
+        }
+
         if (serverUrl.isEmpty()) {
             Toast.makeText(this, "请输入服务器地址", Toast.LENGTH_SHORT).show()
             return

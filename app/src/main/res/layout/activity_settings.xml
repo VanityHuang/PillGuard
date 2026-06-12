@@ -31,7 +31,7 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- 服务器设置 -->
+            <!-- 当前状态 -->
             <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -48,32 +48,90 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="服务器设置"
+                        android:text="当前状态"
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:textColor="@color/text_primary"
                         android:layout_marginBottom="12dp" />
 
-                    <com.google.android.material.textfield.TextInputLayout
+                    <!-- 在线模式显示 -->
+                    <LinearLayout
+                        android:id="@+id/layoutOnlineStatus"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:hint="服务器地址"
-                        android:layout_marginBottom="8dp">
+                        android:orientation="vertical"
+                        android:visibility="gone">
 
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/etServerUrl"
+                        <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:inputType="textUri" />
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
 
-                    </com.google.android.material.textfield.TextInputLayout>
+                            <!-- 状态圆点 -->
+                            <View
+                                android:id="@+id/viewStatusDot"
+                                android:layout_width="10dp"
+                                android:layout_height="10dp"
+                                android:background="@drawable/status_dot"
+                                android:layout_marginEnd="8dp" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnSaveServer"
+                            <TextView
+                                android:id="@+id/tvServerAddress"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:textSize="14sp"
+                                android:textColor="@color/text_primary"
+                                android:fontFamily="monospace" />
+
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tvConnectionStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:textSize="12sp"
+                            android:textColor="@color/text_secondary"
+                            android:layout_marginBottom="8dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnTestConnection"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:text="测试连接"
+                            android:textSize="13sp"
+                            app:cornerRadius="8dp"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            app:strokeColor="@color/primary"
+                            android:textColor="@color/primary" />
+
+                    </LinearLayout>
+
+                    <!-- 离线模式显示 -->
+                    <LinearLayout
+                        android:id="@+id/layoutOfflineStatus"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="保存"
-                        app:cornerRadius="12dp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:visibility="gone">
+
+                        <View
+                            android:layout_width="10dp"
+                            android:layout_height="10dp"
+                            android:background="@drawable/status_dot_offline"
+                            android:layout_marginEnd="8dp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="离线登录"
+                            android:textSize="14sp"
+                            android:textColor="@color/text_primary" />
+
+                    </LinearLayout>
 
                 </LinearLayout>
 

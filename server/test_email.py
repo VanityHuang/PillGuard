@@ -11,6 +11,7 @@ import smtplib
 import subprocess
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 from datetime import datetime
 
 
@@ -78,7 +79,7 @@ def main():
     print("[2/3] 构建测试邮件...")
     msg = MIMEMultipart()
     msg['Subject'] = f'[PillGuard 测试] 邮件发送测试 - {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
-    msg['From'] = f'PillGuard <{SMTP_USER}>'
+    msg['From'] = formataddr(('PillGuard', SMTP_USER))
     msg['To'] = TO_EMAIL
 
     html = f"""

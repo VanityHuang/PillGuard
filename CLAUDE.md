@@ -70,12 +70,13 @@ sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /
 - 打卡时段：早上 2:00–14:00，晚上 14:00–次日 2:00；0:00–2:00 属于前一天晚上
 - 离线用户以 SHA-256 哈希密码存储在 SharedPreferences 中
 
-**UI**（5 个 Activity，竖屏 + ViewBinding）：
-- `LoginActivity` — 自动填入上次信息、静默自动登录、离线模式入口。在线登录成功同步服务器最近 30 天记录
+**UI**（6 个 Activity，竖屏 + ViewBinding）：
+- `LoginActivity` — 自动填入上次信息、静默自动登录、离线模式入口。在线登录成功同步服务器最近 30 天记录。**开发者模式**：用户名和密码都输入 `dev` 可进入 DevModeActivity
 - `MainActivity` — 早晚打卡状态、7 天周历 RecyclerView、工具栏（历史/设置/退出）。`SecurityManager.isLoggedIn()` 守卫
 - `CameraActivity` — CameraX 拍照，保存到 `filesDir/pillsguard_photos/`。拍照前检测重复打卡。离线模式也保存照片并排队上传
 - `HistoryActivity` — 30 天打卡记录列表
-- `SettingsActivity` — 提醒方式开关、系统权限引导（电池优化 + 精准闹钟）、服务器地址、测试提醒、清除历史
+- `SettingsActivity` — 提醒方式开关、系统权限引导（电池优化 + 精准闹钟）、**当前状态**（在线模式显示服务器地址+连接状态圆点+测试连接按钮；离线模式显示"离线登录"）、测试提醒、清除历史
+- `DevModeActivity` — 开发者调试页面，显示设备信息、登录状态、数据库统计、网络状态、服务器连接测试、SharedPreferences 内容
 
 ### 服务器端 — Flask + Gunicorn + Nginx + SQLite
 
@@ -96,12 +97,12 @@ sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /
 
 辅助脚本：
 - `deploy.sh` — 全自动部署：系统依赖、Python venv、JWT 密钥+密码盐值、systemd 服务（gunicorn :5000）、root crontab（每日 22:00 邮件）
-- `daily_email.py` — **关键设计**：`get_service_env()` 通过 `systemctl show pillguard --property=Environment` 从 systemd 读取 SMTP 配置，解决 cron 环境下无环境变量的问题。生成 HTML 报告+照片附件，发送后 `cleanup_photos()` 删除**当天**照片
+- `daily_email.py` — **关键设计**：`get_service_env()` 通过 `systemctl show pillguard --property=Environment` 从 systemd 读取 SMTP 配置，解决 cron 环境下无环境变量的问题。查询 `emailed_at IS NULL` 获取所有**未通过邮件发送的记录**（不限日期），按用户分别发送 HTML 报告+照片附件。发送成功后标记 `emailed_at` 并删除照片文件。部分失败则不标记不删照片，下次重试。首次运行自动迁移 DB 添加 `emailed_at` 列。使用 `formataddr()` 编码中文发件人名避免 QQ 邮箱 550 拒绝
 - `test_email.py` — SMTP 邮件测试，同样用 `get_service_env()` 读配置。部署后：`sudo /var/pillguard/venv/bin/python3 /opt/pillguard/server/test_email.py`
 - `create_user.py` / `manage_user.py` — 用户管理
 
 **服务器照片生命周期**：
-- 正常打卡照片：上传 → 保留到 22:00 → `daily_email.py` 作为日报告附件发送 → `cleanup_photos()` 删除
+- 正常打卡照片：上传 → 保留到 22:00 → `daily_email.py` 作为邮件附件发送 → 标记 `emailed_at` → 删除照片
 - 重复打卡照片：上传 → `send_duplicate_alert_email()` 立即发邮件 → **立即删除**（不等到 22:00）
 - 存储路径：`/var/pillguard/uploads/{user_id}_{date}_{timeSlot}_{uuid}.jpg`
 
@@ -116,7 +117,7 @@ sudo nginx -t && sudo systemctl reload nginx     # Nginx 配置重载（修改 /
 - SMTP 配置存储在 systemd 环境变量中，cron 脚本需通过 `get_service_env()` 读取
 - Nginx 配置位于 `/etc/nginx/sites-available/yellowduck`（不是 sites-available/pillguard）
 - Let's Encrypt 证书域名 `yellowduck.top`，Android 客户端用 `http://47.106.163.25` 直连可绕过 SSL 主机名验证
-- `daily_email.py` 只清理**当天**照片（`WHERE mr.date = ?`），历史遗留照片需手动清理
+- `daily_email.py` 通过 `emailed_at` 追踪已发送记录，不会重复发送；未发送记录（含历史遗留）会在下次执行时一并发出
 - PillGuard systemd 服务 Type=simple，修改 app.py 后需 `sudo systemctl restart pillguard`（不支持 reload）
 - `network_security_config.xml` 中同时配置了 `47.106.163.25` 和 `yellowduck.top` 的 cleartext 允许
 - 照片迁移标记存储在 `pillguard_migration` SharedPreferences 的 `migrated_to_v2` 键，设为 false 可重新触发旧照片清理

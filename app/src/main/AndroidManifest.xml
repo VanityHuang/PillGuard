@@ -64,6 +64,12 @@
             android:exported="false"
             android:screenOrientation="portrait" />
 
+        <!-- 开发者模式页面 -->
+        <activity
+            android:name=".ui.DevModeActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <!-- 提醒广播接收器 -->
         <receiver
             android:name=".receiver.ReminderReceiver"

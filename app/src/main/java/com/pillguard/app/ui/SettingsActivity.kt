@@ -6,7 +6,9 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
+import com.pillguard.app.R
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -40,22 +42,11 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.toolbar.setNavigationOnClickListener { finish() }
 
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-
-        // 加载当前服务器地址
-        binding.etServerUrl.setText(prefs.getString("server_url", ""))
-
-        binding.btnSaveServer.setOnClickListener {
-            val serverUrl = binding.etServerUrl.text.toString().trim()
-            if (serverUrl.isNotEmpty()) {
-                prefs.edit().putString("server_url", serverUrl).apply()
-                val baseUrl = if (serverUrl.endsWith("/api/")) serverUrl else "${serverUrl}/api/"
-                ApiClient.init(baseUrl)
-                Toast.makeText(this, "服务器地址已保存", Toast.LENGTH_SHORT).show()
-            }
-        }
+        // 加载当前状态
+        loadCurrentStatus()
 
         // 加载提醒方式设置
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
         binding.switchVibrate.isChecked = prefs.getBoolean(KEY_REMINDER_VIBRATE, true)
         binding.switchSound.isChecked = prefs.getBoolean(KEY_REMINDER_SOUND, true)
         binding.switchPopup.isChecked = prefs.getBoolean(KEY_REMINDER_POPUP, true)
@@ -109,6 +100,73 @@ class SettingsActivity : AppCompatActivity() {
         super.onResume()
         // 从系统设置返回后刷新权限状态
         updatePermissionStatus()
+        loadCurrentStatus()
+    }
+
+    private fun loadCurrentStatus() {
+        val isOffline = AuthManager.isOfflineMode(this)
+
+        if (isOffline) {
+            // 离线模式
+            binding.layoutOnlineStatus.visibility = View.GONE
+            binding.layoutOfflineStatus.visibility = View.VISIBLE
+        } else {
+            // 在线模式
+            binding.layoutOnlineStatus.visibility = View.VISIBLE
+            binding.layoutOfflineStatus.visibility = View.GONE
+
+            val prefs = getSharedPreferences("pillguard_login", MODE_PRIVATE)
+            val serverUrl = prefs.getString("server_url", "") ?: ""
+
+            binding.tvServerAddress.text = serverUrl.ifEmpty { "未配置" }
+            binding.tvConnectionStatus.text = "点击下方按钮测试连接"
+            binding.viewStatusDot.setBackgroundResource(R.drawable.status_dot)
+
+            binding.btnTestConnection.setOnClickListener { testServerConnection() }
+        }
+    }
+
+    private fun testServerConnection() {
+        val prefs = getSharedPreferences("pillguard_login", MODE_PRIVATE)
+        val serverUrl = prefs.getString("server_url", "") ?: ""
+
+        if (serverUrl.isEmpty()) {
+            Toast.makeText(this, "未配置服务器地址", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        binding.btnTestConnection.isEnabled = false
+        binding.btnTestConnection.text = "测试中..."
+        binding.tvConnectionStatus.text = "正在连接..."
+        binding.viewStatusDot.setBackgroundResource(R.drawable.status_dot)
+
+        lifecycleScope.launch {
+            try {
+                val baseUrl = if (serverUrl.endsWith("/api/")) serverUrl else "${serverUrl}/api/"
+                ApiClient.init(baseUrl)
+
+                val response = withContext(Dispatchers.IO) {
+                    ApiClient.apiService.healthCheck()
+                }
+
+                if (response.isSuccessful) {
+                    binding.viewStatusDot.setBackgroundResource(R.drawable.status_dot_green)
+                    binding.tvConnectionStatus.text = "✅ 连接正常"
+                    binding.tvConnectionStatus.setTextColor(getColor(android.R.color.holo_green_dark))
+                } else {
+                    binding.viewStatusDot.setBackgroundResource(R.drawable.status_dot_red)
+                    binding.tvConnectionStatus.text = "❌ 连接失败: HTTP ${response.code()}"
+                    binding.tvConnectionStatus.setTextColor(getColor(android.R.color.holo_red_dark))
+                }
+            } catch (e: Exception) {
+                binding.viewStatusDot.setBackgroundResource(R.drawable.status_dot_red)
+                binding.tvConnectionStatus.text = "❌ 连接失败: ${e.javaClass.simpleName}"
+                binding.tvConnectionStatus.setTextColor(getColor(android.R.color.holo_red_dark))
+            } finally {
+                binding.btnTestConnection.isEnabled = true
+                binding.btnTestConnection.text = "测试连接"
+            }
+        }
     }
 
     private fun updatePermissionStatus() {
